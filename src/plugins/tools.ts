@@ -79,6 +79,7 @@ function inspectPluginTool(
   entry: PluginToolRegistration,
   registry: PluginRegistry,
   assertInvocationCurrent?: () => void,
+  memoryAudience?: OpenClawPluginToolContext["memoryAudience"],
 ): { tool: AnyAgentTool } | { error: string } | null {
   try {
     if (!isRecord(tool)) {
@@ -108,6 +109,7 @@ function inspectPluginTool(
             registry,
             tool as AnyAgentTool,
             assertInvocationCurrent,
+            memoryAudience,
           ),
         };
   } catch (error) {
@@ -688,6 +690,7 @@ function resolvePluginToolsFromRegistry(
           entry,
           owner.registry,
           factoryContext.assertInvocationCurrent,
+          factoryContext.memoryAudience,
         );
         if (!inspected) {
           continue;
