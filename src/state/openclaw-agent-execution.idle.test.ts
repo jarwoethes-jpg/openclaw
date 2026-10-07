@@ -221,42 +221,40 @@ it("retains failed eviction custody without retaining a fifth idle executor", as
   expect(closedAgents()).toEqual(["first", "fifth"]);
 });
 
-it.each(["removal", "rename", "agent path", "session path"] as const)(
-  "retires affected warm executors after a committed agent %s change",
+it.each(["removal", "rename", "agent path", "session path", "display name"] as const)(
+  "reuses pinned physical executors after a committed %s change",
   async (change) => {
     const config: OpenClawConfig = { agents: { entries: { first: {}, second: {} } } };
     setRuntimeConfigSnapshot(config);
-    await use("first");
-    await use("second");
-    // Publication supports in-place mutations; the executor must retain resolved values.
+    const first = await use("first");
+    const second = await use("second");
     if (change === "removal" || change === "rename") {
       config.agents!.entries = { second: {}, ...(change === "rename" ? { renamed: {} } : {}) };
     } else if (change === "agent path") {
-      const first = config.agents!.entries!.first;
-      assert(first);
-      first.agentDir = path.join(env.OPENCLAW_STATE_DIR!, "relocated");
-    } else {
+      const agent = config.agents!.entries!.first;
+      assert(agent);
+      agent.agentDir = path.join(env.OPENCLAW_STATE_DIR!, "relocated");
+    } else if (change === "session path") {
       config.session = {
         store: path.join(env.OPENCLAW_STATE_DIR!, "relocated", "{agentId}.sqlite"),
       };
+    } else {
+      config.agents!.entries!.first!.name = "New display name";
     }
     setRuntimeConfigSnapshot(config);
-    await vi.advanceTimersByTimeAsync(0);
-    expect(closedAgents()).toEqual(change === "session path" ? ["first", "second"] : ["first"]);
-    await use("second");
-    expect(opened).toHaveLength(change === "session path" ? 3 : 2);
+    for (const pinned of [first, second]) {
+      const execution = captureOpenClawAgentDatabaseExecution({
+        agentId: pinned.agentId,
+        path: pinned.path,
+        env,
+      });
+      try {
+        await execution.prepare(source);
+      } finally {
+        await execution.release();
+      }
+    }
+    expect(opened).toHaveLength(2);
+    expect(closedAgents()).toEqual([]);
   },
 );
-
-it("keeps warm executors through unrelated configuration publication", async () => {
-  setRuntimeConfigSnapshot({ agents: { entries: { first: {}, second: {} } } });
-  await use("first");
-  await use("second");
-  setRuntimeConfigSnapshot({
-    agents: { entries: { first: { name: "New display name" }, second: {} } },
-  });
-  await use("first");
-  await use("second");
-  expect(opened).toHaveLength(2);
-  expect(closedAgents()).toEqual([]);
-});
